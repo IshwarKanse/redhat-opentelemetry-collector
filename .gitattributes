@@ -1,0 +1,3 @@
+# Pre-generated OBI eBPF artifacts, refreshed by make update-obi-generated
+obi-generated/** linguist-generated=true
+obi-generated/**/*.o -diff

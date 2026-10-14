@@ -1,18 +1,18 @@
-# ART/doozer replaces this with the rhel-9-golang stream from ocp-build-data at rebase time
-FROM registry.redhat.io/openshift/golang-builder:golang-builder-v1.26-rhel9 AS bpf-generator
+# ART/doozer replaces this with the rhel-9-golang stream from ocp-build-data at rebase time.
+# Keep the number and the order of the FROM lines: ART maps them to from.builder of the image config in ocp-build-data.
+FROM registry.redhat.io/openshift/golang-builder:golang-builder-v1.26-rhel9 AS obi-source
 
 WORKDIR /opt/app-root/src
 USER root
 
-# The golang-builder image already ships clang and llvm. Install them only when they are missing, so that the
-# Dockerfile also builds where the image has no RHEL repositories, e.g. in OpenShift CI.
-RUN (command -v clang >/dev/null 2>&1 && command -v llvm-strip >/dev/null 2>&1) || \
-    (dnf -y install clang llvm && \
-    dnf clean all && \
-    rm -rf /var/cache/yum)
-
+# Prepare the OBI source. The eBPF artifacts are not generated here: they come pre-generated from the OBI release
+# (obi-generated, see the README), because the clang of this image produces an eBPF program that the verifier of the
+# RHEL 5.14 kernel rejects. Needs no network access and no clang, so it also works in the hermetic ART build.
 COPY .obi-src .obi-src
-RUN GOFLAGS=-mod=mod make -C .obi-src generate
+COPY obi-generated obi-generated
+COPY hack hack
+COPY manifest.yaml manifest.yaml
+RUN sh hack/install-obi-generated.sh
 
 # ART/doozer replaces this with the rhel-9-golang stream from ocp-build-data at rebase time
 FROM registry.redhat.io/openshift/golang-builder:golang-builder-v1.26-rhel9 AS builder
@@ -21,7 +21,7 @@ WORKDIR /opt/app-root/src
 USER root
 
 COPY . .
-COPY --from=bpf-generator /opt/app-root/src/.obi-src .obi-src
+COPY --from=obi-source /opt/app-root/src/.obi-src .obi-src
 
 RUN CGO_ENABLED=0 GOFIPS140=certified go build -C ./_build -mod=mod -o opentelemetry-collector -trimpath -ldflags "-w"
 

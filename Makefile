@@ -14,7 +14,7 @@ build: ocb generate-obi
 
 build-in-podman:
 	podman run -v "$$PWD:/app:z" -w /app --security-opt label=disable registry.access.redhat.com/ubi9/ubi-minimal \
-	  /bin/sh -c "microdnf -y install make which golang git clang llvm && make build"
+	  /bin/sh -c "microdnf -y install make which golang git && make build"
 
 generate-sources: ocb
 	@mkdir -p _build
@@ -45,10 +45,20 @@ ensure-obi:
 	@echo "Ensuring OBI submodule at $(OBI_DIR)..."
 	git submodule update --init --depth 1 $(OBI_DIR)
 
+# The eBPF artifacts of OBI are not generated here, they come pre-generated from the OBI release (obi-generated).
 .PHONY: generate-obi
 generate-obi: ensure-obi
-	@echo "Generating OBI eBPF artifacts..."
-	$(MAKE) -C $(OBI_DIR) generate
+	sh hack/install-obi-generated.sh $(OBI_DIR)
+
+# Refresh obi-generated from the generated source tarball of the OBI release in manifest.yaml.
+.PHONY: update-obi-generated
+update-obi-generated: ensure-obi
+	./hack/update-obi-generated.sh update
+
+# Fail when obi-generated differs from the generated source tarball of the OBI release in manifest.yaml.
+.PHONY: verify-obi-generated
+verify-obi-generated: ensure-obi
+	./hack/update-obi-generated.sh check
 
 # Download all dependencies to the vendor directory.
 .PHONY: vendor
